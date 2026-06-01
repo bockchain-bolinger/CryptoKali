@@ -43,3 +43,4 @@ CryptoKali is a modular, high-performance crypto research, screening, and automa
 
 ---
 *Disclaimer: This is a research and screening tool. No profit guarantees. Always use safe risk management practices.*
+# CrptoKali
