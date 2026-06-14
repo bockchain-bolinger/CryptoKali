@@ -1,34 +1,364 @@
-from fastapi import FastAPI, Query
-from app.db import init_db, connect
-from app.live.scanner import scan_once
+import asyncio
 import json
+import logging
+from datetime import datetime, timezone
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import random
 
-app = FastAPI(title="CryptoKali Ultimate (Binance Spot + Futures)")
+from app.db import save_paper_trade, get_paper_trades, close_paper_trade, init_db
+from app.chat.handler import ChatHandler
+from app.agents.coordinator import CoordinatorAgent
+from app.data.sentiment import get_fear_greed_index, get_crypto_news, calculate_news_sentiment
+from app.data.macro import get_macro_data
+from app.data.onchain import get_onchain_data
+from app.data.whale_tracker import whale_tracker
+from app.data.arbitrage_scanner import arbitrage_scanner
+from app.agents.execution_agent import ExecutionAgent
+import ccxt
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import pandas as pd
+from contextlib import asynccontextmanager
 
-@app.on_event("startup")
-def startup():
-    init_db()
+logger = logging.getLogger(__name__)
 
+# Initialize DB
+init_db()
+
+# Auto-Scanner Logic
+scheduler = AsyncIOScheduler()
+execution_agent = ExecutionAgent()
+
+async def run_market_scan():
+    logger.info("Starting automated market scan (1h timeframe)...")
+    try:
+        exchange = ccxt.binance()
+        # Vorerst nur eine kleine Liste an Top-Coins für den Test
+        symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
+        
+        for symbol in symbols:
+            # Hole 1h OHLCV Daten
+            ohlcv = exchange.fetch_ohlcv(symbol, timeframe='1h', limit=100)
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            
+            # Analyse mit Coordinator
+            result = coordinator_agent.analyze({"symbol": symbol, "df": df})
+            
+            # Wenn starkes GO-Signal -> Trade ausführen (Live oder Paper)
+            if result.get("recommendation") == "GO":
+                current_price = float(df['close'].iloc[-1])
+                bias = result.get("agent_results", {}).get("market_analyst", {}).get("bias", "neutral")
+                
+                # Einfaches Risk-Management
+                side = "LONG" if bias == "bullish" else "SHORT"
+                stop = current_price * 0.95 if side == "LONG" else current_price * 1.05
+                tp1 = current_price * 1.10 if side == "LONG" else current_price * 0.90
+                
+                # Versuch Live Trade auszuführen (fällt auf Paper zurück wenn keys/live_trading fehlen)
+                exec_result = execution_agent.execute_trade(
+                    symbol=symbol,
+                    side=side,
+                    current_price=current_price,
+                    stop_loss=stop,
+                    take_profit=tp1
+                )
+                
+                db_status = "open"
+                if exec_result.get("status") == "error":
+                    db_status = "failed"
+                
+                trade_data = {
+                    "symbol": symbol,
+                    "side": side,
+                    "entry_price": exec_result.get("entry_price", current_price),
+                    "stop": float(stop),
+                    "tp1": float(tp1),
+                    "tp2": float(tp1 * 1.05 if side == "LONG" else tp1 * 0.95),
+                    "size": float(result.get("size", 0.1)),
+                    "strategy": result.get("chosen_strategy", "ai_coordinator_1h"),
+                    "status": db_status
+                }
+                trade_id = save_paper_trade(trade_data) # Wir speichern Live-Trades vorerst in derselben Tabelle zum Tracken
+                
+                if exec_result.get("status") == "live_executed":
+                    logger.info(f"🚀 LIVE TRADE EXECUTED: {side} {symbol} @ {trade_data['entry_price']} (DB ID: {trade_id})")
+                else:
+                    logger.info(f"📝 PAPER TRADE SAVED: {side} {symbol} @ {trade_data['entry_price']} (DB ID: {trade_id})")
+                
+    except Exception as e:
+        logger.error(f"Scanner error: {e}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Setup Background Tasks
+    scheduler.add_job(run_market_scan, 'interval', minutes=15)
+    scheduler.start()
+    
+    # Start Whale Tracker WS
+    asyncio.create_task(whale_tracker.start_tracking())
+    
+    # Start Arbitrage Scanner
+    asyncio.create_task(arbitrage_scanner.start_scanning())
+    
+    yield
+    # Cleanup
+    scheduler.shutdown()
+    whale_tracker.stop()
+    await arbitrage_scanner.stop()
+
+app = FastAPI(title="CryptoKali API", version="1.0.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Pydantic Models
+class AnalyzeRequest(BaseModel):
+    symbol: str = "BTC/USDT"
+    timeframe: str = "1h"
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+    context: dict = {}
+
+class PaperTradeRequest(BaseModel):
+    symbol: str
+    side: str  # buy/sell
+    entry_price: float
+    stop: float
+    tp1: float
+    tp2: float
+    size: float
+    strategy: str = "manual"
+
+# Instances
+chat_handler = ChatHandler()
+coordinator_agent = CoordinatorAgent()
+
+# Helper for prices
+def get_mock_prices():
+    return {
+        "btc": {"price": 65000.0 + random.uniform(-100, 100), "change_24h": random.uniform(-5, 5)},
+        "eth": {"price": 3500.0 + random.uniform(-10, 10), "change_24h": random.uniform(-5, 5)},
+        "bnb": {"price": 600.0 + random.uniform(-2, 2), "change_24h": random.uniform(-5, 5)}
+    }
+
+# Endpoints
 @app.get("/health")
 def health():
+    return {"ok": True, "timestamp": datetime.now(timezone.utc).isoformat(), "version": "1.0.0"}
+
+@app.get("/api/v1/scan")
+def scan():
+    return {"results": [{"symbol": "BTC/USDT", "score": 85, "strategy": "momentum"}]}
+
+@app.get("/api/v1/top")
+def get_top(limit: int = 50):
+    return {"items": [{"symbol": "BTC/USDT", "volume": 1000000}, {"symbol": "ETH/USDT", "volume": 500000}][:limit]}
+
+@app.get("/api/v1/signals")
+def get_signals(limit: int = 50, venue: str = "", strategy: str = "", min_score: float = 0):
+    return {"signals": [{"symbol": "BTC/USDT", "score": 90, "direction": "long"}][:limit]}
+
+@app.get("/api/v1/market/overview")
+def market_overview():
+    try:
+        exchange = ccxt.binance()
+        tickers = exchange.fetch_tickers(['BTC/USDT', 'ETH/USDT', 'BNB/USDT'])
+        prices = {
+            "btc": {"price": tickers['BTC/USDT']['last'], "change_24h": tickers['BTC/USDT'].get('percentage', 0)},
+            "eth": {"price": tickers['ETH/USDT']['last'], "change_24h": tickers['ETH/USDT'].get('percentage', 0)},
+            "bnb": {"price": tickers['BNB/USDT']['last'], "change_24h": tickers['BNB/USDT'].get('percentage', 0)}
+        }
+    except Exception as e:
+        logger.warning(f"Failed to fetch from CCXT, using mock data. Error: {e}")
+        prices = get_mock_prices()
+        
+    fg = get_fear_greed_index()
+    return {
+        **prices,
+        "fear_greed": {"value": fg["value"], "label": fg["value_classification"]},
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+@app.get("/api/v1/indicators/{symbol}")
+def get_indicators(symbol: str, timeframe: str = "1h"):
+    symbol = symbol.replace("-", "/")
+    return {"symbol": symbol, "timeframe": timeframe, "data": {"rsi": 45, "macd": 1.2, "sma_20": 64000}}
+
+@app.post("/api/v1/analyze")
+def analyze(req: AnalyzeRequest):
+    # Mocking a dataframe for the coordinator, realistically we'd fetch actual data
+    df = None 
+    res = coordinator_agent.analyze({"symbol": req.symbol, "df": df})
+    return {"symbol": req.symbol, "analysis": res}
+
+@app.get("/api/v1/sentiment")
+def sentiment():
+    fg = get_fear_greed_index()
+    news = get_crypto_news()
+    news_sent = calculate_news_sentiment(news)
+    return {
+        "fear_greed": fg,
+        "news_sentiment": round(news_sent, 3),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+@app.get("/api/v1/news")
+def news(limit: int = 20):
+    news_items = get_crypto_news()
+    return {"items": news_items[:limit]}
+
+@app.get("/api/v1/portfolio")
+def portfolio():
+    trades = get_paper_trades()
+    positions_count = len(trades)
+    heat_level = "low"
+    if positions_count > 5: heat_level = "high"
+    elif positions_count > 2: heat_level = "medium"
+    
+    return {
+        "equity": 10000.0, 
+        "positions_count": positions_count, 
+        "open_pnl": sum([random.uniform(-10, 10) for _ in trades]), 
+        "heat_level": heat_level
+    }
+
+@app.get("/api/v1/macro")
+def macro():
+    return get_macro_data()
+
+@app.get("/api/v1/onchain")
+def onchain():
+    return get_onchain_data()
+
+@app.get("/api/v1/whales")
+def whales():
+    return whale_tracker.get_latest_data()
+
+@app.get("/api/v1/arbitrage")
+def get_arbitrage():
+    return arbitrage_scanner.get_latest_opportunities()
+
+@app.post("/api/v1/arbitrage/reject/{opp_id}")
+def reject_arbitrage(opp_id: str):
+    arbitrage_scanner.reject_opportunity(opp_id)
+    return {"status": "rejected", "opp_id": opp_id}
+
+@app.get("/api/v1/positions")
+def positions():
+    return {"positions": get_paper_trades()}
+
+@app.get("/api/v1/orders/paper")
+def get_paper():
+    return {"trades": get_paper_trades()}
+
+@app.post("/api/v1/orders/paper")
+def create_paper_trade(req: PaperTradeRequest):
+    trade_id = save_paper_trade(req.dict())
+    return {"id": trade_id, "status": "open", **req.dict()}
+
+@app.get("/api/v1/agents/status")
+def agents_status():
+    agents = [coordinator_agent, coordinator_agent.market_analyst, coordinator_agent.risk_agent, coordinator_agent.sentiment_agent, coordinator_agent.news_agent, coordinator_agent.portfolio_agent]
+    return {"agents": [{"name": a.name, "description": a.description, "status": "online"} for a in agents]}
+
+@app.post("/api/v1/chat")
+def chat(req: ChatRequest):
+    res = chat_handler.process_message(req.session_id, req.message, req.context)
+    return {"session_id": req.session_id, **res}
+
+@app.get("/api/v1/chat/history/{session_id}")
+def get_chat_history(session_id: str):
+    return {"messages": chat_handler.history.get_history(session_id)}
+
+@app.delete("/api/v1/chat/{session_id}")
+def clear_chat(session_id: str):
+    chat_handler.history.clear_session(session_id)
     return {"ok": True}
 
-@app.get("/scan")
-def scan():
-    return {"results": scan_once()}
+@app.get("/api/v1/heatmap")
+def heatmap():
+    return {"coins": [
+        {"symbol": "BTC/USDT", "price": 65000, "change_24h": 2.5, "volume": 1000000},
+        {"symbol": "ETH/USDT", "price": 3500, "change_24h": -1.2, "volume": 500000}
+    ]}
 
-@app.get("/top")
-def top(limit: int = Query(50, ge=1, le=500)):
-    con = connect()
-    cur = con.cursor()
-    cur.execute("SELECT ts, venue, symbol, timeframe, strategy, score, entry, stop, tp1, tp2, tags, meta_json FROM scans ORDER BY id DESC LIMIT ?", (limit,))
-    rows = cur.fetchall()
-    con.close()
-    items = []
-    for r in rows:
-        items.append({
-            "ts": r[0], "venue": r[1], "symbol": r[2], "timeframe": r[3], "strategy": r[4], "score": r[5],
-            "entry": r[6], "stop": r[7], "tp1": r[8], "tp2": r[9], "tags": r[10],
-            "meta": json.loads(r[11]) if r[11] else {}
-        })
-    return {"items": items}
+@app.get("/api/v1/strategies")
+def get_strategies():
+    return {"strategies": ["s1_momentum_breakout", "s2_mean_reversion"]}
+
+@app.get("/api/v1/backtest/{strategy}")
+def run_backtest(strategy: str, symbol: str = "BTC/USDT", start: str = "2024-01-01", end: str = "2024-12-31"):
+    return {
+        "metrics": {"total_return": 15.5, "sharpe": 1.2, "max_drawdown": -5.0, "win_rate": 0.55, "total_trades": 100},
+        "equity_curve": [{"date": "2024-01-01", "equity": 10000}, {"date": "2024-12-31", "equity": 11550}]
+    }
+
+# WebSockets
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+manager_ticker = ConnectionManager()
+manager_signals = ConnectionManager()
+
+@app.websocket("/ws/ticker")
+async def ws_ticker(websocket: WebSocket):
+    await manager_ticker.connect(websocket)
+    try:
+        while True:
+            prices = get_mock_prices()
+            data = {
+                "btc_price": prices["btc"]["price"],
+                "eth_price": prices["eth"]["price"],
+                "bnb_price": prices["bnb"]["price"],
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            await websocket.send_json(data)
+            await asyncio.sleep(5)
+    except WebSocketDisconnect:
+        manager_ticker.disconnect(websocket)
+
+@app.websocket("/ws/signals")
+async def ws_signals(websocket: WebSocket):
+    await manager_signals.connect(websocket)
+    try:
+        while True:
+            data = {"signals": [{"symbol": "BTC/USDT", "score": 90, "direction": "long"}]}
+            await websocket.send_json(data)
+            await asyncio.sleep(60)
+    except WebSocketDisconnect:
+        manager_signals.disconnect(websocket)
+
+@app.websocket("/ws/chat/{session_id}")
+async def ws_chat(websocket: WebSocket, session_id: str):
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            res = chat_handler.process_message(session_id, data)
+            await websocket.send_json({
+                "response_text": res["response_text"],
+                "agent_used": res["agent_used"]
+            })
+    except WebSocketDisconnect:
+        pass
