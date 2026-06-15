@@ -5,7 +5,7 @@ import { Send, Plus, MessageSquare, Bot, Search, AlertTriangle, Newspaper, Brief
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([
-    { role: 'assistant', content: 'Willkommen bei CryptoKali AI! Frag mich über den Markt, Signale oder dein Portfolio. Nutze /help für verfügbare Befehle.', timestamp: new Date().toISOString() }
+    { role: 'assistant', content: 'Willkommen bei Apex AI! Frag mich über den Markt, Signale oder dein Portfolio. Nutze /help für verfügbare Befehle.', timestamp: new Date().toISOString() }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);

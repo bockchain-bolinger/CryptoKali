@@ -11,10 +11,12 @@ import {
   Bot,
   History,
   Settings,
+  Activity,
+  Beaker,
+  Network,
   Wifi,
   WifiOff,
-  BarChart2,
-  Activity
+  BarChart2
 } from 'lucide-react';
 import { ToastProvider } from '@/components/ui/Toast';
 import './globals.css';
@@ -44,6 +46,10 @@ export default function RootLayout({
     { name: 'Signals', path: '/signals', icon: <Radio size={18} /> },
     { name: 'Chart', path: '/chart/BTC-USDT', icon: <LineChart size={18} /> },
     { name: 'Macro & Academy', path: '/macro', icon: <BarChart2 size={18} /> },
+    { name: 'Macro Simulator', path: '/simulator', icon: <Beaker size={18} /> },
+    { name: 'Apex Evolution', path: '/evolution', icon: <Bot size={18} /> },
+    { name: 'Strategy Lab', path: '/lab', icon: <Beaker size={18} /> },
+    { name: 'Apex Predictor', path: '/ml', icon: <Network size={18} /> },
     { name: 'AI Chat', path: '/chat', icon: <MessageSquare size={18} /> },
     { name: 'Portfolio', path: '/portfolio', icon: <Briefcase size={18} /> },
     { name: 'Agents', path: '/agents', icon: <Bot size={18} /> },
@@ -54,14 +60,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <title>CryptoKali Pro</title>
-        <meta name="description" content="Crypto Trading Dashboard" />
+        <title>Apex AI Pro</title>
+        <meta name="description" content="Advanced AI Trading Dashboard" />
       </head>
       <body>
         <div className="sidebar">
           <div className="sidebar-logo">
-            <div className="sidebar-logo-icon">K</div>
-            <div className="sidebar-logo-text">CryptoKali Pro</div>
+            <div className="sidebar-logo-icon">A</div>
+            <div className="sidebar-logo-text">Apex AI Pro</div>
           </div>
           <nav className="sidebar-nav">
             {navItems.map((item) => (

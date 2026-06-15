@@ -35,7 +35,7 @@ export default function SignalsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'cryptokali_signals.json';
+    a.download = 'apex_ai_signals.json';
     a.click();
   };
 

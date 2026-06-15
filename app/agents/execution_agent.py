@@ -37,42 +37,54 @@ class ExecutionAgent:
         else:
             logger.info("🟡 LIVE TRADING IS DISABLED. Using Paper Trading / Smart Order Routing Mock.")
 
-    def execute_trade(self, symbol: str, side: str, current_price: float, stop_loss: float, take_profit: float) -> dict:
-    def find_best_exchange(self, symbol: str, side: str) -> dict:
+    def sync_active_strategies(self):
+        """
+        Fetches active (promoted) strategies from the knowledge layer.
+        """
+        try:
+            from app.db import get_active_strategies
+            active = get_active_strategies()
+            self.active_strategies = active
+            logger.info(f"Execution Agent synced {len(active)} active strategies from Lab.")
+        except Exception as e:
+            logger.error(f"Failed to sync active strategies: {e}")
+
+    async def find_best_exchange(self, symbol: str, side: str, amount: float = 1.0) -> dict:
         """
         Smart Order Routing: Finds the exchange with the best price for the given side.
-        Returns {'exchange': name, 'price': float}
         """
-        best_price = None
-        best_exchange = "binance"
-        
-        for name, ex in self.exchanges.items():
-            try:
-                ticker = ex.fetch_ticker(symbol)
-                # If buying, we want the lowest ask. If selling, highest bid.
-                price = ticker['ask'] if side.upper() in ["LONG", "BUY"] else ticker['bid']
+        try:
+            from app.core.sor_engine import sor_engine
+            res = await sor_engine.get_best_execution(symbol, side, amount)
+            if res.get("status") == "success":
+                return {"exchange": res["best_exchange"], "price": res["best_price"]}
+        except Exception as e:
+            logger.error(f"SOR Engine Error: {e}")
                 
-                if best_price is None:
-                    best_price = price
-                    best_exchange = name
-                else:
-                    if side.upper() in ["LONG", "BUY"] and price < best_price:
-                        best_price = price
-                        best_exchange = name
-                    elif side.upper() in ["SHORT", "SELL"] and price > best_price:
-                        best_price = price
-                        best_exchange = name
-            except Exception as e:
-                pass
-                
-        return {"exchange": best_exchange, "price": best_price or 0.0}
+        # Fallback to binance if SOR fails
+        return {"exchange": "binance", "price": 0.0}
 
-    def execute_trade(self, symbol: str, side: str, current_price: float, stop_loss: float, take_profit: float, override_size: float = None) -> dict:
+    async def execute_trade(self, symbol: str, side: str, current_price: float, stop_loss: float, take_profit: float, override_size: float = None, confidence: float = 0.5) -> dict:
         """
         Executes a live market order followed by an OCO (One-Cancels-the-Other) order for TP & SL.
         Uses Smart Order Routing to find the best exchange.
         """
-        best_route = self.find_best_exchange(symbol, side)
+        from app.core.sentinel import sentinel
+        
+        # 1. Ask Sentinel for permission
+        sentinel_decision = sentinel.evaluate_trade(symbol, side, confidence, current_price, stop_loss)
+        if not sentinel_decision.get("approved", False):
+            logger.warning(f"Execution Agent aborted trade for {symbol}. Sentinel Reason: {sentinel_decision.get('reason')}")
+            return {
+                "status": "blocked_by_sentinel",
+                "message": sentinel_decision.get("reason"),
+                "size": 0
+            }
+            
+        # Use sentinel's suggested size if override is not explicitly forced by another module
+        calculated_size_usdt = override_size if override_size else (sentinel_decision.get("suggested_size", 0.0) * current_price)
+        
+        best_route = await self.find_best_exchange(symbol, side)
         ex_name = best_route["exchange"]
         active_exchange = self.exchanges[ex_name]
         
@@ -92,8 +104,8 @@ class ExecutionAgent:
             active_exchange.load_markets()
             market = active_exchange.market(symbol)
             
-            # Use override size (Kelly) if provided, otherwise default fixed USDT amount
-            usdt_amount = override_size if override_size else self.trade_amount_usdt
+            # Use Sentinel's size (or override) instead of the hardcoded ENV setting
+            usdt_amount = calculated_size_usdt
             size_raw = usdt_amount / current_price
             size = active_exchange.amount_to_precision(symbol, size_raw)
             

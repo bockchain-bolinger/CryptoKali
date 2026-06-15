@@ -57,7 +57,7 @@ async def run_market_scan():
                 tp1 = current_price * 1.10 if side == "LONG" else current_price * 0.90
                 
                 # Versuch Live Trade auszuführen (fällt auf Paper zurück wenn keys/live_trading fehlen)
-                exec_result = execution_agent.execute_trade(
+                exec_result = await execution_agent.execute_trade(
                     symbol=symbol,
                     side=side,
                     current_price=current_price,
@@ -108,7 +108,7 @@ async def lifespan(app: FastAPI):
     whale_tracker.stop()
     await arbitrage_scanner.stop()
 
-app = FastAPI(title="CryptoKali API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Apex AI API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -235,6 +235,20 @@ def portfolio():
 def macro():
     return get_macro_data()
 
+@app.post("/api/v1/macro/simulate")
+async def simulate_macro(request: Request):
+    try:
+        data = await request.json()
+        dxy_change = float(data.get("dxy_change_pct", 0.0))
+        rate_change = float(data.get("rate_change_pct", 0.0))
+        
+        from app.agents.macro_agent import macro_agent
+        result = await macro_agent.simulate_scenario(dxy_change, rate_change)
+        return result
+    except Exception as e:
+        logger.error(f"Macro Simulator Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/v1/onchain")
 def onchain():
     return get_onchain_data()
@@ -264,6 +278,36 @@ def get_paper():
 def create_paper_trade(req: PaperTradeRequest):
     trade_id = save_paper_trade(req.dict())
     return {"id": trade_id, "status": "open", **req.dict()}
+
+@app.post("/api/v1/orders/paper/{trade_id}/close")
+async def close_trade_api(trade_id: int, request: Request):
+    try:
+        data = await request.json()
+        exit_price = data.get("exit_price", 0.0)
+        
+        # 1. Close trade in DB
+        pnl = close_paper_trade(trade_id, exit_price)
+        
+        # 2. Trigger Evolution Post-Mortem asynchronously
+        from app.agents.evolution_agent import evolution_agent
+        # We need symbol, entry, side for post-mortem
+        # Since close_paper_trade doesn't return everything, we just mock the details or fetch them
+        # For simplicity in API, assume we pass basic info via request or fetch it
+        symbol = data.get("symbol", "UNKNOWN")
+        entry_price = data.get("entry_price", 0.0)
+        side = data.get("side", "LONG")
+        
+        asyncio.create_task(evolution_agent.run_post_mortem(trade_id, symbol, entry_price, exit_price, side, pnl))
+        
+        return {"status": "success", "trade_id": trade_id, "pnl": pnl}
+    except Exception as e:
+        logger.error(f"Error closing trade: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/evolution/lessons")
+def get_lessons():
+    from app.db import get_trade_lessons
+    return get_trade_lessons(limit=20)
 
 @app.get("/api/v1/agents/status")
 def agents_status():
@@ -296,11 +340,154 @@ def get_strategies():
     return {"strategies": ["s1_momentum_breakout", "s2_mean_reversion"]}
 
 @app.get("/api/v1/backtest/{strategy}")
-def run_backtest(strategy: str, symbol: str = "BTC/USDT", start: str = "2024-01-01", end: str = "2024-12-31"):
-    return {
-        "metrics": {"total_return": 15.5, "sharpe": 1.2, "max_drawdown": -5.0, "win_rate": 0.55, "total_trades": 100},
-        "equity_curve": [{"date": "2024-01-01", "equity": 10000}, {"date": "2024-12-31", "equity": 11550}]
-    }
+async def run_backtest_old(strategy: str):
+    # Backward compatibility mock
+    return {"message": "Use POST /api/v1/backtest/run instead", "strategy": strategy}
+
+@app.post("/api/v1/lab/experiment/run")
+async def run_experiment(request: Request):
+    try:
+        data = await request.json()
+        experiment_name = data.get("name", "Auto Experiment")
+        venue = data.get("venue", "binance")
+        symbol = data.get("symbol", "BTC/USDT")
+        timeframe = data.get("timeframe", "1h")
+        strategy = data.get("strategy", "MACD_Cross")
+        
+        from app.core.experiment_lab import lab
+        result = lab.run_experiment(experiment_name, venue, symbol, timeframe, strategy)
+        
+        if result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=result["message"])
+            
+        return result
+    except Exception as e:
+        logger.error(f"Error running experiment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/lab/experiments")
+async def get_experiments():
+    from app.db import get_experiment_runs
+    return get_experiment_runs()
+
+@app.post("/api/v1/lab/experiment/{run_id}/promote")
+async def promote_experiment_endpoint(run_id: int, request: Request):
+    try:
+        data = await request.json()
+        new_status = data.get("status", "paper")
+        
+        from app.db import promote_experiment
+        success = promote_experiment(run_id, new_status)
+        if not success:
+            raise HTTPException(status_code=404, detail="Experiment run not found")
+            
+        return {"status": "success", "run_id": run_id, "new_status": new_status}
+    except Exception as e:
+        logger.error(f"Error promoting experiment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/strategies/active")
+async def active_strategies():
+    from app.db import get_active_strategies
+    return get_active_strategies()
+
+@app.post("/api/v1/ml/train")
+async def train_ml_model(request: Request):
+    try:
+        data = await request.json()
+        symbol = data.get("symbol", "BTC/USDT")
+        timeframe = data.get("timeframe", "1h")
+        
+        from app.agents.predictor_agent import predictor
+        result = predictor.train_model(symbol, timeframe)
+        
+        if result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=result["message"])
+            
+        return result
+    except Exception as e:
+        logger.error(f"Error training ML model: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/ml/predict/{symbol:path}")
+async def predict_ml(symbol: str, timeframe: str = "1h"):
+    try:
+        from app.agents.predictor_agent import predictor
+        result = predictor.predict(symbol, timeframe)
+        
+        if result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=result["message"])
+            
+        return result
+    except Exception as e:
+        logger.error(f"Error making ML prediction: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/risk/status")
+async def get_risk_status():
+    from app.core.sentinel import sentinel
+    return sentinel.get_status()
+
+@app.post("/api/v1/portfolio/optimize")
+async def optimize_portfolio(request: Request):
+    try:
+        data = await request.json()
+        symbols = data.get("symbols", ["BTC/USDT", "ETH/USDT"])
+        from app.core.sentinel import sentinel
+        result = sentinel.get_optimal_allocation(symbols)
+        if result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=result["message"])
+        return result
+    except Exception as e:
+        logger.error(f"Optimization error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/arbitrage/scan")
+async def scan_arbitrage():
+    try:
+        from app.core.sor_engine import sor_engine
+        results = await sor_engine.scan_arbitrage()
+        return results
+    except Exception as e:
+        logger.error(f"Error scanning arbitrage: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/data/fetch-historical")
+async def fetch_historical(request: Request):
+    try:
+        data = await request.json()
+        venue = data.get("venue", "binance")
+        symbol = data.get("symbol", "BTC/USDT")
+        timeframe = data.get("timeframe", "1h")
+        candles = data.get("candles", 1000)
+        
+        from app.data.historical_loader import fetch_historical_ohlcv
+        count = await fetch_historical_ohlcv(venue, symbol, timeframe, limit=candles)
+        
+        return {"status": "success", "fetched": count}
+    except Exception as e:
+        logger.error(f"Error fetching historical data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/backtest/run")
+async def run_backtest_new(request: Request):
+    try:
+        data = await request.json()
+        venue = data.get("venue", "binance")
+        symbol = data.get("symbol", "BTC/USDT")
+        timeframe = data.get("timeframe", "1h")
+        strategy = data.get("strategy", "MACD_Cross")
+        
+        from app.core.auditor import auditor_engine
+        result = auditor_engine.run_backtest(venue, symbol, timeframe, strategy)
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+            
+        return result
+    except Exception as e:
+        logger.error(f"Error running backtest: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # WebSockets
 class ConnectionManager:

@@ -1,0 +1,51 @@
+=======================================================
+               APEX AI - PENDING TODOS
+=======================================================
+
+Herzlichen Glückwunsch! Der Code ist zu 100% fertig. 
+Hier ist die Liste der manuellen Dinge, die du jetzt noch 
+erledigen musst, um das System scharf zu schalten:
+
+[ ] 1. API Keys in die .env eintragen
+    Du musst im Ordner /home/artuirik/Schreibtisch/CryptoKali/
+    die Datei `.env` anpassen oder erstellen.
+    Folgende Keys werden dringend benötigt:
+    - OPENAI_API_KEY= (für die Agenten, Chatbot, Evolution & Macro-Simulator)
+    - BINANCE_API_KEY= (für Live-Trading & SOR)
+    - BINANCE_SECRET_KEY= (für Live-Trading & SOR)
+    - KUCOIN_API_KEY= (optional für Arbitrage)
+    - BITGET_API_KEY= (optional für Arbitrage)
+    - CRYPTO_PANIC_API_KEY= (für den News Agent)
+
+[ ] 2. Live-Trading aktivieren (Optional)
+    Wenn du nicht mehr nur "Paper Trading" (Simulation) machen willst:
+    In der `.env` Datei setzen:
+    - LIVE_TRADING=true
+    - PAPER_TRADING=false
+
+[ ] 3. Vercel & Ngrok Deployment
+    Wenn du das Dashboard auf deinem Handy von unterwegs sehen willst:
+    - Ngrok auf deinem PC installieren und starten: `ngrok http 8000`
+    - Das Repository (CryptoKali) auf GitHub hochladen (als PRIVAT markieren!).
+    - Bei Vercel.com anmelden, das GitHub-Repo importieren.
+    - Als 'Root Directory' in Vercel 'web' auswählen.
+    - Bei Vercel die Umgebungsvariable NEXT_PUBLIC_API_URL auf deine 
+      Ngrok-URL (z.B. https://deine-url.ngrok-free.app) setzen.
+    (Siehe DEPLOYMENT_GUIDE.md für die genaue Anleitung).
+
+[ ] 4. PostgreSQL Datenbank (Optional, aber empfohlen)
+    Aktuell nutzt das System PostgreSQL (falls erreichbar) oder fällt 
+    auf SQLite zurück. Für maximale Performance bei Millionen von 
+    Candlesticks solltest du eine echte PostgreSQL Datenbank lokal 
+    installieren (z.B. über Docker) und die `DATABASE_URL` in der `.env` 
+    setzen:
+    DATABASE_URL=postgresql://user:password@localhost:5432/apex_ai
+
+[ ] 5. Maschine laufen lassen
+    Dein PC muss angeschaltet bleiben und der Server muss laufen 
+    (`uvicorn app.main_api:app --reload`), damit die automatischen 
+    Scans, das Portfolio-Rebalancing und die Arbitrage-Suche funktionieren.
+
+=======================================================
+Viel Erfolg auf dem Weg zum institutionellen Trader!
+=======================================================

@@ -1,119 +1,75 @@
-# 🚀 CryptoKali Pro
+# Apex AI (formerly CryptoKali) 🚀
 
-**CryptoKali Pro** ist ein fortschrittliches, voll-autonomes Krypto-Trading- und Makro-Analyse-System. Es nutzt eine Multi-Agenten-Architektur, Smart Order Routing (Multi-Exchange) und lokale Large Language Models (LLM-Swarm), um Trades nicht nur auszuführen, sondern auch das Portfolio-Risiko dynamisch zu managen.
+![Apex AI Banner](https://img.shields.io/badge/Status-Feature_Complete-success?style=for-the-badge) ![Python](https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python&logoColor=white) ![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=for-the-badge&logo=fastapi&logoColor=white) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)
 
-![CryptoKali Architecture](https://img.shields.io/badge/Architecture-Multi--Agent-6366f1) ![Status](https://img.shields.io/badge/Status-Beta-22d3ee) ![Python](https://img.shields.io/badge/Python-3.11+-blue) ![Next.js](https://img.shields.io/badge/Next.js-14-black)
+Apex AI is an institutional-grade, fully autonomous algorithmic trading and research framework. It is designed to replace human emotion with pure mathematics, real-time machine learning, and multi-agent AI orchestration.
 
 ---
 
-## 🌟 Kernfunktionen
+## 🌟 Key Features
 
-### 🧠 1. Multi-Agenten Schwarm
-Das Herzstück des Systems ist der `CoordinatorAgent`, der spezialisierte KI-Agenten orchestriert:
-- **MarketAnalyst:** Berechnet technische Indikatoren (CVD, MACD, Ichimoku, RSI) und identifiziert Trends.
-- **RiskAgent:** Wendet dynamische Positionsgrößen basierend auf deiner historischen Win-Rate an (**Kelly Criterion**).
-- **Sentiment & News:** Analysiert den *Fear & Greed Index* und Echtzeit-News.
-- **LLM Second-Opinion:** Solange die Strategie keine Win-Rate von > 90% hat, sendet das System die Analysedaten live an ein lokales **Ollama-LLM** als finalen Validator.
+### 1. Multi-Agent AI Swarm (MoE)
+A specialized "Mixture of Experts" architecture coordinates trading decisions:
+- **Market Analyst Agent:** Processes raw OHLCV and technical indicators to establish a market bias.
+- **Risk Agent:** Applies the Kelly Criterion and strict risk constraints to protect capital.
+- **Sentiment & News Agent:** Evaluates the global Crypto Fear & Greed Index and real-time news via CryptoPanic.
+- **Coordinator Agent:** Orchestrates the swarm, weighing all inputs to issue the final `GO / NO-GO` execution command.
 
-### 🐳 2. Whale Tracking & Makroökonomie
-- **Live Orderbook (CVD):** Verbindet sich über WebSockets mit Binance, um extrem große Einzel-Trades (> 50k USDT) in Millisekunden zu filtern.
-- **Makro-Dashboard:** Zieht Echtzeitdaten der **US-Treasury Yields** und des **US-Dollar Index (DXY)** via Yahoo Finance, um die globale Liquidität in Entscheidungen einzubeziehen.
-- **On-Chain TVL:** Integriert DefiLlama, um das Total Value Locked in den Netzwerken zu scannen.
+### 2. Machine Learning Predictor
+- Uses an embedded `Random Forest Classifier` (scikit-learn).
+- Real-time feature engineering (Returns, RSI, MACD, Volatility).
+- Continuously trains on historical data to predict the next candle's trend probability.
 
-### 🔀 3. Smart Order Routing & Arbitrage
-- **Multi-Exchange:** Handelt asynchron auf *Binance*, *KuCoin* und *Bitget*. 
-- **SOR:** Sucht vor jedem Trade das Orderbuch nach dem besten Kauf-/Verkaufspreis (Geringste Slippage) ab.
-- **Arbitrage-Scanner:** Ein Hintergrund-Service gleicht permanent Spreads zwischen den drei Börsen ab und pusht profitable Ineffizienzen in Echtzeit in dein Dashboard.
+### 3. Institutional Risk Management
+- **PyPortfolioOpt Integration:** Utilizes Modern Portfolio Theory (MPT).
+- Automatically calculates the **Max Sharpe Ratio** allocation based on the covariance matrix of active positions, ensuring the portfolio is mathematically balanced.
 
-### 🖥 4. Futuristische Benutzeroberfläche
-- Ein komplett in **Next.js 14** (App Router) gebautes Dashboard.
-- **Aesthetics:** Glassmorphism-Design, interaktive Heatmaps und Micro-Animationen.
-- **Live-Radar:** Beinhaltet Live-Charts, Portfolio-Heatmaps, Whale-Radar und ein Order-Management-Terminal.
+### 4. Smart Order Routing (SOR) & Arbitrage
+- Real-time, asynchronous orderbook scanning via CCXT.
+- The `Execution Agent` automatically routes orders to the exchange with the lowest slippage (Binance, KuCoin, Bitget).
+- Embedded Arbitrage Radar constantly scans for cross-exchange inefficiencies and visualizes profitable spreads.
+
+### 5. Apex Evolution (Continuous Learning)
+- A self-improving RAG (Retrieval-Augmented Generation) pipeline.
+- Performs an automated LLM "Post-Mortem" autopsy every time a trade closes.
+- Extracts actionable lessons and stores them in the `trade_lessons` database to prevent repeating the same mistakes.
+
+### 6. "What-If" Macro Simulator
+- A sandbox to simulate macroeconomic shocks.
+- Tweak the US Dollar Index (DXY) or FED Interest Rates to see real-time AI projections on Bitcoin, Ethereum, and DeFi TVL, accompanied by an institutional flash report.
+
+### 7. Futuristic Dashboard
+- A sleek, Next.js-powered Glassmorphism UI.
+- Live WebSockets for Ticker and Chatbot integration.
+- Includes sub-dashboards for Portfolio Management, AI Chat, Arbitrage, Strategy Lab, and Macroeconomics.
 
 ---
 
 ## 🛠 Tech Stack
 
-**Backend:**
-- **Python (FastAPI)** für asynchrone APIs.
-- **CCXT & WebSockets** für Exchange-Konnektivität.
-- **PostgreSQL (Docker)** für hochperformantes Speichern von Ticks und Trade-Historien.
-- **APScheduler** für regelmäßiges Market-Scanning.
-
-**Frontend:**
-- **Next.js 14 (TypeScript)** 
-- **Vanilla CSS** mit Custom Design-Tokens für maximale Performance.
-- **SWR** & Native WebSockets für Live-Data-Streaming.
-
-**KI & Modelle:**
-- **Ollama** für kostenloses, privates LLM-Hosting (Mentor & Risk-Validator).
-- Optionale OpenAI API-Anbindung für GPT-4 Analysen.
+- **Backend:** Python, FastAPI, Uvicorn, APScheduler.
+- **Data & ML:** Pandas, NumPy, Scikit-Learn, PyPortfolioOpt, TA-Lib.
+- **Exchange Connectivity:** CCXT (async).
+- **Database:** PostgreSQL (with TimescaleDB extension recommended).
+- **Frontend:** Next.js 14, React, Lucide-Icons, Lightweight Charts.
+- **AI Core:** OpenAI GPT-4o, local Ollama fallbacks.
 
 ---
 
-## 🚀 Installation & Setup
+## 🚀 Quick Start
 
-### Voraussetzungen
-- Docker & Docker Compose
-- Node.js 18+ (Für das Frontend)
-- Python 3.11+
-- Ollama (Lokal installiert)
+1. **Start the PostgreSQL Database:** Ensure your database is running and the `DATABASE_URL` is set in the `.env`.
+2. **Start the Backend:**
+   ```bash
+   cd /home/artuirik/Schreibtisch/CryptoKali
+   source .venv/bin/activate
+   uvicorn app.main_api:app --reload
+   ```
+3. **Start the Frontend:**
+   ```bash
+   cd /home/artuirik/Schreibtisch/CryptoKali/web
+   npm run dev
+   ```
+4. Open `http://localhost:3000` in your browser.
 
-### 1. Datenbank starten
-Die gesamte Infrastruktur läuft über PostgreSQL.
-```bash
-sudo docker compose up -d
-```
-
-### 2. Backend starten
-```bash
-# Virtuelles Environment erstellen und aktivieren
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Abhängigkeiten installieren
-pip install -r requirements.txt
-
-# Server starten
-uvicorn app.main_api:app --reload --port 8000 --host 0.0.0.0
-```
-
-### 3. Frontend starten
-```bash
-cd web
-npm install
-npm run dev -- -H 0.0.0.0
-```
-
-### 4. Lokalen KI-Mentor starten (Ollama)
-In einem neuen Terminalfenster:
-```bash
-ollama run llama3
-```
-*(Das Backend verbindet sich standardmäßig mit `localhost:11434`)*
-
----
-
-## 🔐 Umgebungsvariablen (`.env`)
-
-Kopiere `.env.example` in `.env` und befülle die Keys:
-```env
-# Börsen API Keys
-BINANCE_API_KEY=dein_key
-BINANCE_SECRET_KEY=dein_secret
-KUCOIN_API_KEY=dein_key
-...
-
-# Trading Setup
-LIVE_TRADING=false
-TRADE_AMOUNT_USDT=20
-
-# Ollama Setup
-OLLAMA_URL=http://localhost:11434/api/chat
-OLLAMA_MODEL=llama3
-```
-
----
-
-## 🛑 Haftungsausschluss (Disclaimer)
-*Dieses System ist ein experimentelles Tool für den automatisierten algorithmischen Handel. Kryptowährungen unterliegen starken Schwankungen. Die Nutzung dieses Systems (insbesondere der "Live Trading" Modus) erfolgt auf eigene Gefahr. Die Entwickler übernehmen keine Haftung für finanzielle Verluste.*
+*(For a detailed breakdown of the system architecture, see `DOCS.md`)*

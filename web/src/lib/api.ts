@@ -217,3 +217,111 @@ export async function fetchArbitrageSpreads() {
 export async function rejectArbitrage(oppId: string) {
   return fetchWithFallback(`/api/v1/arbitrage/reject/${oppId}`, { status: "mocked_rejection" }, { method: "POST" });
 }
+
+export async function fetchHistoricalData(venue: string, symbol: string, timeframe: string, candles: number) {
+  return fetchWithFallback('/api/v1/data/fetch-historical', { status: "success", fetched: candles }, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ venue, symbol, timeframe, candles })
+  });
+}
+
+export async function runBacktest(venue: string, symbol: string, timeframe: string, strategy: string) {
+  const mock = {
+    venue, symbol, timeframe, strategy,
+    trades: 124, winrate: 68.5, profit_factor: 1.8, max_dd: 4.2, expectancy: 0.5, net_pnl: 1450.50,
+    meta_json: { equity_curve: [], trades: [] }
+  };
+  return fetchWithFallback('/api/v1/backtest/run', mock, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ venue, symbol, timeframe, strategy })
+  });
+}
+
+export async function fetchRiskStatus() {
+  return fetchWithFallback('/api/v1/risk/status', {
+    circuit_breaker_active: false,
+    max_risk_per_trade_pct: 2.0,
+    max_daily_drawdown_pct: 5.0,
+    max_open_positions: 3,
+    current_open_positions: 1,
+    status: "SAFE"
+  });
+}
+
+export async function runExperiment(name: string, venue: string, symbol: string, timeframe: string, strategy: string) {
+  return fetchWithFallback('/api/v1/lab/experiment/run', { status: "mocked" }, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, venue, symbol, timeframe, strategy })
+  });
+}
+
+export async function fetchExperiments() {
+  return fetchWithFallback('/api/v1/lab/experiments', []);
+}
+
+export async function promoteExperiment(runId: number, status: string) {
+  return fetchWithFallback(`/api/v1/lab/experiment/${runId}/promote`, { status: "mocked" }, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status })
+  });
+}
+
+export async function trainMLModel(symbol: string, timeframe: string) {
+  return fetchWithFallback('/api/v1/ml/train', { status: "mocked" }, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbol, timeframe })
+  });
+}
+
+export async function predictML(symbol: string, timeframe: string = "1h") {
+  return fetchWithFallback(`/api/v1/ml/predict/${encodeURIComponent(symbol)}?timeframe=${timeframe}`, { 
+    status: "mocked", 
+    prediction: "BULLISH",
+    confidence: 0.85
+  });
+}
+
+export async function optimizePortfolio(symbols: string[]) {
+  return fetchWithFallback('/api/v1/portfolio/optimize', { status: "mocked" }, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbols })
+  });
+}
+
+export async function scanArbitrage() {
+  return fetchWithFallback('/api/v1/arbitrage/scan', [
+    { symbol: 'BTC/USDT', buy_exchange: 'binance', sell_exchange: 'kucoin', buy_price: 65000, sell_price: 65050, net_spread_pct: 0.05, is_profitable: true }
+  ]);
+}
+
+export async function closePaperTrade(tradeId: number, exitPrice: number) {
+  return fetchWithFallback(`/api/v1/orders/paper/${tradeId}/close`, { status: "success" }, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ exit_price: exitPrice, symbol: "BTC/USDT", side: "LONG" }) // Mock details for now
+  });
+}
+
+export async function getEvolutionLessons() {
+  return fetchWithFallback('/api/v1/evolution/lessons', [
+    { id: 1, trade_id: 12, symbol: 'BTC/USDT', pnl: 45.2, market_context: 'Trade: LONG BTC/USDT', lesson_learned: 'Successful momentum capture during high volume expansion.', timestamp: Date.now() }
+  ]);
+}
+
+export async function simulateMacroScenario(dxyChange: number, rateChange: number) {
+  return fetchWithFallback('/api/v1/macro/simulate', {
+    status: 'success',
+    projections: { btc_impact_pct: 12.5, eth_impact_pct: 15.6, tvl_impact_pct: 20.0, projected_btc: 73000, projected_eth: 4000, sentiment: 'Bullish' },
+    report: 'Mock Report: Lower rates and a weaker dollar trigger a massive risk-on rally.'
+  }, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dxy_change_pct: dxyChange, rate_change_pct: rateChange })
+  });
+}

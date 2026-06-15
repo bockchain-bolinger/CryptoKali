@@ -66,7 +66,17 @@ class ArbitrageScanner:
                 
                 # Assume 0.2% total fees (0.1% buy + 0.1% sell)
                 if spread_pct > 0.2:
+                    from app.core.sentinel import sentinel
+                    
                     opp_id = f"{symbol}-{best_ask_ex}-{best_bid_ex}-{int(datetime.now().timestamp())}"
+                    
+                    # Ask sentinel if we are allowed to take this trade
+                    # We pass confidence=0.9 for arbitrage
+                    sentinel_check = sentinel.evaluate_trade(symbol, "BUY", 0.9, best_ask)
+                    
+                    status = "pending_approval"
+                    if not sentinel_check.get("approved"):
+                        status = "blocked_by_sentinel"
                     
                     opp = {
                         "id": opp_id,
@@ -77,7 +87,8 @@ class ArbitrageScanner:
                         "sell_price": best_bid,
                         "spread_pct": round(spread_pct, 4),
                         "timestamp": datetime.now().isoformat(),
-                        "status": "pending_approval" # Wartet auf User Input
+                        "status": status,
+                        "sentinel_reason": sentinel_check.get("reason", "") if status == "blocked_by_sentinel" else "Approved"
                     }
                     opportunities.append(opp)
 

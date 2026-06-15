@@ -1,12 +1,12 @@
 services:
   db:
     image: postgres:16
-    container_name: cryptokali_db
+    container_name: apex_ai_db
     restart: always
     environment:
-      POSTGRES_USER: cryptokali
+      POSTGRES_USER: apex_ai
       POSTGRES_PASSWORD: password123
-      POSTGRES_DB: cryptokali
+      POSTGRES_DB: apex_ai
     ports:
       - "5432:5432"
     volumes:

@@ -1,5 +1,5 @@
 """
-risk_agent.py – RiskAgent for CryptoKali.
+risk_agent.py – RiskAgent for Apex AI.
 
 Evaluates a proposed trade plan against:
   • Kelly Criterion (half-Kelly sizing for safety)
